@@ -7,7 +7,6 @@ from markupsafe import escape
 from dotenv import load_dotenv
 
 load_dotenv("env")
-
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
 
@@ -27,228 +26,92 @@ def get_db():
 
 
 def page(title, content):
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>{title}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                background: #f2f4f7;
-                padding: 25px 12px;
-            }}
-            .container {{
-                max-width: 600px;
-                margin: auto;
-                background: white;
-                padding: 20px;
-                border-radius: 8px;
-            }}
-            input, button {{
-                box-sizing: border-box;
-                padding: 10px;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-            }}
-            button {{
-                background: white;
-                color: #333;
-                cursor: pointer;
-            }}
-            a {{ color: #333; }}
-            .add-form {{
-                display: flex;
-                gap: 8px;
-            }}
-            .add-form input {{
-                flex: 1;
-                min-width: 0;
-            }}
-            .add-form button {{
-                width: 65px;
-            }}
-            .task {{
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 10px 0;
-                border-bottom: 1px solid #ddd;
-            }}
-            .task form {{
-                margin: 0;
-            }}
-            .task input[type="checkbox"] {{
-                width: 18px;
-                height: 18px;
-                cursor: pointer;
-            }}
-            .edit-form {{
-                display: flex;
-                flex: 1;
-                gap: 5px;
-                min-width: 0;
-            }}
-            .edit-form input {{
-                width: 100%;
-                min-width: 0;
-            }}
-            .done {{
-                text-decoration: line-through;
-                color: gray;
-            }}
-            .error {{
-                color: red;
-            }}
-            .counter {{
-                background: #eef5ff;
-                padding: 12px;
-                border-radius: 6px;
-                margin: 15px 0;
-            }}
-            .filters {{
-                margin: 15px 0;
-            }}
-            .filters a {{
-                margin-right: 10px;
-            }}
-            @media (max-width: 450px) {{
-                .task {{
-                    flex-wrap: wrap;
-                }}
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">{content}</div>
-    </body>
-    </html>
-    """
+    return f"""<html><head><title>{title}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+    body{{font-family:Arial;background:#f2f4f7;padding:20px}}
+    .box{{max-width:600px;margin:auto;background:white;padding:20px;border-radius:8px}}
+    input,button{{padding:10px;border:1px solid #ddd;border-radius:5px;box-sizing:border-box}}
+    button{{cursor:pointer}}a{{color:#333}}.error{{color:red}}
+    .task,.form{{display:flex;align-items:center;gap:8px;margin:10px 0}}
+    .form input,.edit input{{flex:1;min-width:0}}
+    .done{{text-decoration:line-through;color:gray}}
+    .counter{{background:#eef5ff;padding:12px}}
+    </style></head><body><div class="box">{content}</div></body></html>"""
 
 
 def error_page(message, back="/"):
-    return page("Error", f"""
-        <p class="error">{escape(message)}</p>
-        <a href="{back}">Go back</a>
-    """)
+    return page("Error", f'<p class="error">{escape(message)}</p><a href="{back}">Go back</a>')
+
+
+def login_form():
+    return page("Login", """
+    <h2>Login</h2>
+    <form method="POST" action="/login">
+    <p>Email<br><input type="email" name="email" required></p>
+    <p>Password<br><input type="password" name="password" required></p>
+    <button>Login</button></form>
+    <a href="/register">Register</a>""")
+
+
+def register_form(message=""):
+    return page("Register", f"""
+    <h2>Register</h2>
+    <p class="error">{escape(message)}</p>
+    <form method="POST" action="/register">
+    <p>Name<br><input name="name" maxlength="100" required></p>
+    <p>Email<br><input type="email" name="email" required></p>
+    <p>Password<br><input type="password" name="password"
+    minlength="8" required></p>
+    <p>Confirm Password<br><input type="password" name="confirm" required></p>
+    <button>Register</button></form>
+    <a href="/">Login</a>""")
+
+
+def logged_in():
+    return "user_id" in session
 
 
 @app.route("/")
 def home():
-    return page("Login", """
-        <h2>Login</h2>
-        <form method="POST" action="/login">
-            <p>
-                <label>Email</label><br>
-                <input type="email" name="email"
-                       placeholder="Enter your email" required>
-            </p>
-            <p>
-                <label>Password</label><br>
-                <input type="password" name="password"
-                       placeholder="Enter your password" required>
-            </p>
-            <button type="submit">Login</button>
-        </form>
-        <p>Don't have an account? <a href="/register">Register</a></p>
-    """)
+    return login_form()
 
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "GET":
-        return page("Register", """
-            <h2>Register</h2>
-            <form method="POST">
-                <p>
-                    <label>Name</label><br>
-                    <input name="name" placeholder="Enter your name"
-                           maxlength="100" required>
-                </p>
-                <p>
-                    <label>Email</label><br>
-                    <input type="email" name="email"
-                           placeholder="Enter your email" required>
-                </p>
-                <p>
-                    <label>Password</label><br>
-                    <input type="password" name="password"
-                           placeholder="Enter your password" required>
-                </p>
-                <p>
-                    <label>Confirm Password</label><br>
-                    <input type="password" name="confirm"
-                           placeholder="Confirm your password" required>
-                </p>
-                <button type="submit">Register</button>
-            </form>
-            <p>Already registered? <a href="/">Login</a></p>
-        """)
+        return register_form(session.pop("register_message", ""))
 
     name = request.form.get("name", "").strip()
     email = request.form.get("email", "").strip()
     password = request.form.get("password", "")
     confirm = request.form.get("confirm", "")
 
-    if not name:
-        return error_page("Name is required", "/register")
-    if not email:
-        return error_page("Email is required", "/register")
-    if not password:
-        return error_page("Password is required", "/register")
-    if not confirm:
-        return error_page("Confirm password is required", "/register")
+    if not name or not email or not password or not confirm:
+        session["register_message"] = "All fields are required"
+        return redirect("/register")
+
+    if len(password) < 8:
+        session["register_message"] = "Password must be at least 8 characters"
+        return redirect("/register")
+
     if password != confirm:
-        return error_page("Passwords do not match", "/register")
+        session["register_message"] = "Passwords do not match"
+        return redirect("/register")
 
-    hashed = bcrypt.hashpw(
-        password.encode(), bcrypt.gensalt()
-    ).decode()
-
+    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     db = get_db()
+
     try:
         with db.cursor() as cur:
             cur.execute(
-                """INSERT INTO users (name, email, password_hash)
-                   VALUES (%s, %s, %s)""",
+                "INSERT INTO users (name,email,password_hash) VALUES (%s,%s,%s)",
                 (name, email, hashed)
             )
         db.commit()
     except pymysql.err.IntegrityError:
-         return page("Register", f"""
-            <h2>Register</h2>
-
-            <p style="color: red;">Email already exists. .</p>
-
-            <form method="POST">
-                <p>
-                    <label>Name</label><br>
-                    <input name="name" value="{escape(name)}"
-                           maxlength="100" required>
-                </p>
-
-                <p>
-                    <label>Email</label><br>
-                    <input type="email" name="email" value="{escape(email)}"
-                           required>
-                             </p>
-
-                <p>
-                    <label>Password</label><br>
-                    <input type="password" name="password" required>
-                </p>
-
-                <p>
-                    <label>Confirm Password</label><br>
-                    <input type="password" name="confirm" required>
-                </p>
-
-                <button type="submit">Register</button>
-            </form>
-
-            <p>Already registered? <a href="/">Login</a></p>
-        """)
+        session["register_message"] = "Email already exists"
+        return redirect("/register")
     finally:
         db.close()
 
@@ -260,17 +123,11 @@ def login():
     email = request.form.get("email", "").strip()
     password = request.form.get("password", "")
 
-    if not email:
-        return error_page("Email is required")
-    if not password:
-        return error_page("Password is required")
-
     db = get_db()
     try:
         with db.cursor() as cur:
             cur.execute(
-                """SELECT user_id, name, password_hash
-                   FROM users WHERE email = %s""",
+                "SELECT user_id,name,password_hash FROM users WHERE email=%s",
                 (email,)
             )
             user = cur.fetchone()
@@ -282,6 +139,7 @@ def login():
     ):
         return error_page("Invalid email or password")
 
+    session.clear()
     session["user_id"] = user["user_id"]
     session["name"] = user["name"]
     return redirect("/todos")
@@ -289,142 +147,104 @@ def login():
 
 @app.route("/todos", methods=["GET", "POST"])
 def todos():
-    if not session.get("user_id"):
+    if not logged_in():
         return redirect("/")
 
-    user_id = session["user_id"]
-    message = ""
-
+    uid = session["user_id"]
     filter_by = request.args.get("filter", "all")
     if filter_by not in ("all", "open", "done"):
         filter_by = "all"
 
     if request.method == "POST":
         title = request.form.get("title", "").strip()
-
-        if not title:
-            message = "Title is required"
-        elif len(title) > 200:
-            message = "Title is too long (200 characters at most)"
+        if not title or len(title) > 200:
+            message = "Enter a title up to 200 characters"
         else:
             db = get_db()
             try:
                 with db.cursor() as cur:
                     cur.execute(
-                        """INSERT INTO todos (user_id, title)
-                           VALUES (%s, %s)""",
-                        (user_id, title)
+                        "INSERT INTO todos (user_id,title) VALUES (%s,%s)",
+                        (uid, title)
                     )
                 db.commit()
             finally:
                 db.close()
-
             return redirect("/todos?filter=" + filter_by)
+    else:
+        message = ""
 
-    query = """
-        SELECT todo_id, title, is_done
-        FROM todos
-        WHERE user_id = %s
-    """
-    params = [user_id]
-
+    query = "SELECT todo_id,title,is_done FROM todos WHERE user_id=%s"
     if filter_by == "open":
-        query += " AND is_done = 0"
+        query += " AND is_done=0"
     elif filter_by == "done":
-        query += " AND is_done = 1"
-
-    query += " ORDER BY created_at DESC, todo_id DESC"
+        query += " AND is_done=1"
+    query += " ORDER BY created_at DESC,todo_id DESC"
 
     db = get_db()
     try:
         with db.cursor() as cur:
-            cur.execute(query, params)
+            cur.execute(query, (uid,))
             tasks = cur.fetchall()
-
             cur.execute(
-                """SELECT COUNT(*) AS open_count
-                   FROM todos
-                   WHERE user_id = %s AND is_done = 0""",
-                (user_id,)
+                "SELECT COUNT(*) AS n FROM todos WHERE user_id=%s AND is_done=0",
+                (uid,)
             )
-            open_count = cur.fetchone()["open_count"]
+            count = cur.fetchone()["n"]
     finally:
         db.close()
 
-    task_html = ""
-
-    for task in tasks:
-        tid = task["todo_id"]
-        title = escape(task["title"])
-        checked = "checked" if task["is_done"] else ""
-        done_class = "done" if task["is_done"] else ""
-
-        task_html += f"""
+    html = ""
+    for t in tasks:
+        tid = t["todo_id"]
+        title = escape(t["title"])
+        checked = "checked" if t["is_done"] else ""
+        done = "done" if t["is_done"] else ""
+        html += f"""
         <div class="task">
-            <form method="POST" action="/todos/{tid}/toggle">
-                <input type="checkbox" {checked}
-                       onchange="this.form.submit()">
-            </form>
+        <form method="POST" action="/todos/{tid}/toggle">
+        <input type="checkbox" {checked}
+        onchange="this.form.submit()"></form>
+        <form class="edit" method="POST" action="/todos/{tid}/edit">
+        <input name="title" value="{title}" class="{done}"
+        maxlength="200" required>
+        <button>Save</button></form>
+        <form method="POST" action="/todos/{tid}/delete"
+        onsubmit="return confirm('Delete this task?')">
+        <button>Delete</button></form>
+        </div>"""
 
-            <form class="edit-form" method="POST"
-                  action="/todos/{tid}/edit">
-                <input class="{done_class}" name="title"
-                       value="{title}" maxlength="200" required>
-                <button type="submit">Save</button>
-            </form>
+    if not tasks:
+        html = "<p>No tasks to display.</p>"
 
-            <form method="POST" action="/todos/{tid}/delete"
-                  onsubmit="return confirm('Are you sure you want to delete this task?');">
-                <button type="submit">Delete</button>
-            </form>
-        </div>
-        """
-
-    all_style = "font-weight:bold;" if filter_by == "all" else ""
-    open_style = "font-weight:bold;" if filter_by == "open" else ""
-    done_style = "font-weight:bold;" if filter_by == "done" else ""
+    filters = " | ".join(
+        f'<a href="/todos?filter={v}">{v.title()}</a>'
+        for v in ("all", "open", "done")
+    )
 
     return page("My Tasks", f"""
-        <h2>To-Do List</h2>
-        <p>Welcome, {escape(session.get("name", ""))}</p>
-
-        <div class="counter">
-            <strong>Open tasks: {open_count}</strong>
-        </div>
-
-        <form class="add-form" method="POST">
-            <input name="title"
-                   placeholder="What needs to be done?"
-                   maxlength="200" required>
-            <button type="submit">Add</button>
-        </form>
-
-        <p class="error">{escape(message)}</p>
-
-        <h3>Filter Tasks</h3>
-        <div class="filters">
-            <a href="/todos?filter=all" style="{all_style}">All</a>
-            <a href="/todos?filter=open" style="{open_style}">Open</a>
-            <a href="/todos?filter=done" style="{done_style}">Done</a>
-        </div>
-
-        {task_html if tasks else "<p>No tasks to display.</p>"}
-
-        <p><a href="/logout">Logout</a></p>
-    """)
+    <h2>To-Do List</h2>
+    <p>Welcome, {escape(session.get("name", ""))}</p>
+    <p class="counter">Open tasks: {count}</p>
+    <form method="POST" class="form">
+    <input name="title" placeholder="New task" maxlength="200" required>
+    <button>Add</button></form>
+    <p class="error">{escape(message)}</p>
+    <h3>Filter: {filters}</h3>
+    {html}<a href="/logout">Logout</a>""")
 
 
 @app.route("/todos/<int:tid>/toggle", methods=["POST"])
 def toggle(tid):
-    if not session.get("user_id"):
+    if not logged_in():
         return redirect("/")
 
     db = get_db()
     try:
         with db.cursor() as cur:
             cur.execute(
-                """UPDATE todos SET is_done = 1 - is_done
-                   WHERE todo_id = %s AND user_id = %s""",
+                "UPDATE todos SET is_done=1-is_done "
+                "WHERE todo_id=%s AND user_id=%s",
                 (tid, session["user_id"])
             )
         db.commit()
@@ -436,24 +256,19 @@ def toggle(tid):
 
 @app.route("/todos/<int:tid>/edit", methods=["POST"])
 def edit(tid):
-    if not session.get("user_id"):
+    if not logged_in():
         return redirect("/")
 
     title = request.form.get("title", "").strip()
-
-    if not title:
-        return error_page("Title is required", "/todos")
-    if len(title) > 200:
-        return error_page(
-            "Title is too long (200 characters at most)", "/todos"
-        )
+    if not title or len(title) > 200:
+        return error_page("Title must contain 1 to 200 characters", "/todos")
 
     db = get_db()
     try:
         with db.cursor() as cur:
             cur.execute(
-                """UPDATE todos SET title = %s
-                   WHERE todo_id = %s AND user_id = %s""",
+                "UPDATE todos SET title=%s "
+                "WHERE todo_id=%s AND user_id=%s",
                 (title, tid, session["user_id"])
             )
         db.commit()
@@ -465,15 +280,14 @@ def edit(tid):
 
 @app.route("/todos/<int:tid>/delete", methods=["POST"])
 def delete(tid):
-    if not session.get("user_id"):
+    if not logged_in():
         return redirect("/")
 
     db = get_db()
     try:
         with db.cursor() as cur:
             cur.execute(
-                """DELETE FROM todos
-                   WHERE todo_id = %s AND user_id = %s""",
+                "DELETE FROM todos WHERE todo_id=%s AND user_id=%s",
                 (tid, session["user_id"])
             )
         db.commit()
