@@ -1,282 +1,420 @@
 
 import os
-from html import escape
-
-from flask import Flask, request, redirect, session
 import pymysql
 import bcrypt
+from flask import Flask, request, redirect, session
+from markupsafe import escape
 from dotenv import load_dotenv
 
-# Load environment variables from the file named "env"
 load_dotenv("env")
 
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY")
 
-secret_key = os.getenv("SECRET_KEY")
-
-if not secret_key:
-    raise RuntimeError("SECRET_KEY is missing from the env file")
-
-app.secret_key = secret_key
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+if not app.secret_key:
+    raise RuntimeError("SECRET_KEY is missing from env file")
 
 
-# Connect to MySQL database
-def get_connection():
+def get_db():
     return pymysql.connect(
         host=os.getenv("DB_HOST", "localhost"),
         user=os.getenv("DB_USER", "root"),
         password=os.getenv("DB_PASSWORD"),
         database=os.getenv("DB_NAME", "registration"),
-        port=int(os.getenv("DB_PORT", "3306"))
+        port=int(os.getenv("DB_PORT", "3306")),
+        cursorclass=pymysql.cursors.DictCursor
     )
 
 
-# Login page
-@app.route("/")
-def home():
-    return """
-    <h2>Login Application</h2>
-
-    <form action="/login" method="POST">
-        <label>Email:</label>
-        <input type="email" name="email" required maxlength="255">
-        <br><br>
-
-        <label>Password:</label>
-        <input type="password" name="password" required>
-        <br><br>
-
-        <button type="submit">Login</button>
-    </form>
-
-    <p>Don't have an account?
-       <a href="/register">Register</a></p>
+def page(title, content):
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>{title}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                background: #f2f4f7;
+                padding: 25px 12px;
+            }}
+            .container {{
+                max-width: 600px;
+                margin: auto;
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+            }}
+            input, button {{
+                box-sizing: border-box;
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+            }}
+            button {{
+                background: white;
+                color: #333;
+                cursor: pointer;
+            }}
+            a {{ color: #333; }}
+            .add-form {{
+                display: flex;
+                gap: 8px;
+            }}
+            .add-form input {{
+                flex: 1;
+                min-width: 0;
+            }}
+            .add-form button {{
+                width: 65px;
+            }}
+            .task {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 0;
+                border-bottom: 1px solid #ddd;
+            }}
+            .task form {{
+                margin: 0;
+            }}
+            .task input[type="checkbox"] {{
+                width: 18px;
+                height: 18px;
+                cursor: pointer;
+            }}
+            .edit-form {{
+                display: flex;
+                flex: 1;
+                gap: 5px;
+                min-width: 0;
+            }}
+            .edit-form input {{
+                width: 100%;
+                min-width: 0;
+            }}
+            .done {{
+                text-decoration: line-through;
+                color: gray;
+            }}
+            .error {{
+                color: red;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">{content}</div>
+    </body>
+    </html>
     """
 
 
-# Registration page
-@app.route("/register", methods=["GET", "POST"])
-def register():
+def error_page(message, back="/"):
+    return page("Error", f"""
+        <p class="error">{escape(message)}</p>
+        <a href="{back}">Go back</a>
+    """)
 
-    if request.method == "GET":
-        return """
-        <h2>Create Account</h2>
 
-        <form method="POST" action="/register"
-              onsubmit="return validateForm()">
 
-            <label>Name:</label>
-            <input type="text" name="name" id="name"
-                   required maxlength="100">
-            <br><br>
 
-            <label>Email:</label>
-            <input type="email" name="email" id="email"
-                   required maxlength="255">
-            <br><br>
+@app.route("/")
+def home():
+    return page("Login", """
+        <h2>Login</h2>
 
-            <label>Password:</label>
-            <input type="password" name="password" id="password"
-                   required minlength="8">
-            <br><br>
+        <form method="POST" action="/login">
+            <p>
+                <label>Email</label><br>
+                <input type="email" name="email"
+                       placeholder="Enter your email" required>
+            </p>
 
-            <label>Confirm Password:</label>
-            <input type="password" name="confirm_password"
-                   id="confirm_password" required>
-            <br><br>
+            <p>
+                <label>Password</label><br>
+                <input type="password" name="password"
+                       placeholder="Enter your password" required>
+            </p>
 
-            <p id="error" style="color:red;"></p>
-
-            <button type="submit">Register</button>
+            <button type="submit">Login</button>
         </form>
 
-        <p><a href="/">Back to Login</a></p>
+        <p>Don't have an account?
+           <a href="/register">Register</a></p>
+    """)
 
-        <script>
-        function validateForm() {
-            const name =
-                document.getElementById("name").value.trim();
-            const email =
-                document.getElementById("email").value.trim();
-            const password =
-                document.getElementById("password").value;
-            const confirmPassword =
-                document.getElementById("confirm_password").value;
-            const error =
-                document.getElementById("error");
 
-            error.textContent = "";
 
-            if (name.length === 0 || name.length > 100) {
-                error.textContent =
-                    "Name is required (maximum 100 characters).";
-                return false;
-            }
 
-            if (email.length === 0 || email.length > 255) {
-                error.textContent = "Please enter a valid email.";
-                return false;
-            }
+@app.route("/register", methods=["GET", "POST"])
+def register():
+   
+    if request.method == "GET":
+        return page("Register", """
+            <h2>Register</h2>
 
-            if (password.length < 8) {
-                error.textContent =
-                    "Password must be at least 8 characters.";
-                return false;
-            }
+            <form method="POST">
+                <p>
+                    <label>Name</label><br>
+                    <input name="name" placeholder="Enter your name"
+                           maxlength="100" required>
+                </p>
 
-            if (password !== confirmPassword) {
-                error.textContent = "Passwords do not match.";
-                return false;
-            }
+                <p>
+                    <label>Email</label><br>
+                    <input type="email" name="email"
+                           placeholder="Enter your email" required>
+                </p>
 
-            return true;
-        }
-        </script>
-        """
+                <p>
+                    <label>Password</label><br>
+                    <input type="password" name="password"
+                           placeholder="Enter your password" required>
+                </p>
 
-    # Get submitted registration data
+                <p>
+                    <label>Confirm Password</label><br>
+                    <input type="password" name="confirm"
+                           placeholder="Confirm your password" required>
+                </p>
+
+                <button type="submit">Register</button>
+            </form>
+
+            <p>Already registered? <a href="/">Login</a></p>
+        """)
+
+
     name = request.form.get("name", "").strip()
     email = request.form.get("email", "").strip()
     password = request.form.get("password", "")
-    confirm_password = request.form.get("confirm_password", "")
+    confirm = request.form.get("confirm", "")
 
-    # Server-side validation
-    errors = []
+    if not name:
+        return error_page("Name is required", "/register")
+    if not email:
+        return error_page("Email is required", "/register")
+    if not password:
+        return error_page("Password is required", "/register")
+    if not confirm:
+        return error_page("Confirm password is required", "/register")
+    if password != confirm:
+        return error_page("Passwords do not match", "/register")
 
-    if not name or len(name) > 100:
-        errors.append(
-            "Name is required and must be at most 100 characters."
-        )
+    hashed = bcrypt.hashpw(
+        password.encode(), bcrypt.gensalt()
+    ).decode()
 
-    if not email or len(email) > 255 or "@" not in email:
-        errors.append("Please enter a valid email address.")
-
-    if len(password) < 8:
-        errors.append("Password must be at least 8 characters.")
-
-    if password != confirm_password:
-        errors.append("Passwords do not match.")
-
-    if errors:
-        return (
-            "<h2>Registration Errors</h2><ul>"
-            + "".join(
-                f"<li>{escape(error)}</li>" for error in errors
-            )
-            + '</ul><a href="/register">Try again</a>'
-        ), 400
-
-    # Hash the password before storing it
-    password_hash = bcrypt.hashpw(
-        password.encode("utf-8"),
-        bcrypt.gensalt()
-    ).decode("utf-8")
-
-    connection = get_connection()
-
+    db = get_db()
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO users (email, name, password_hash)
-                VALUES (%s, %s, %s)
-                """,
-                (email, name, password_hash)
+        with db.cursor() as cur:
+            cur.execute(
+                """INSERT INTO users (name, email, password_hash)
+                   VALUES (%s, %s, %s)""",
+                (name, email, hashed)
             )
-
-            user_id = cursor.lastrowid
-
-        connection.commit()
-
-        # Log in the newly registered user
-        session.clear()
-        session["user_id"] = user_id
-        session["name"] = name
-
-        return redirect("/welcome", code=303)
-
+        db.commit()
     except pymysql.err.IntegrityError:
-        connection.rollback()
-
-        return """
-        <h2>Email Already Exists</h2>
-        <p>This email is already registered.</p>
-        <a href="/register">Try another email</a>
-        """, 409
-
+        return error_page("Email Already Exists", "/register")
     finally:
-        connection.close()
+        db.close()
+
+    return redirect("/")
 
 
-# Login
 @app.route("/login", methods=["POST"])
 def login():
-
     email = request.form.get("email", "").strip()
     password = request.form.get("password", "")
 
-    if not email or len(email) > 255 or not password:
-        return (
-            '<h2>Invalid email or password.</h2>'
-            '<a href="/">Try again</a>'
-        ), 400
+    if not email:
+        return error_page("Email is required")
+    if not password:
+        return error_page("Password is required")
 
-    connection = get_connection()
-
+    db = get_db()
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT user_id, name, password_hash
-                FROM users
-                WHERE email = %s
-                """,
+        with db.cursor() as cur:
+            cur.execute(
+                """SELECT user_id, name, password_hash
+                   FROM users WHERE email = %s""",
                 (email,)
             )
-
-            user = cursor.fetchone()
-
-        if user:
-            stored_hash = user[2].encode("utf-8")
-
-            if bcrypt.checkpw(
-                password.encode("utf-8"),
-                stored_hash
-            ):
-                session.clear()
-                session["user_id"] = user[0]
-                session["name"] = user[1]
-
-                return redirect("/welcome", code=303)
-
-        return (
-            '<h2>Invalid email or password.</h2>'
-            '<a href="/">Try again</a>'
-        ), 401
-
+            user = cur.fetchone()
     finally:
-        connection.close()
+        db.close()
+
+    if not user or not bcrypt.checkpw(
+        password.encode(), user["password_hash"].encode()
+    ):
+        return error_page("Invalid email or password")
+
+    session["user_id"] = user["user_id"]
+    session["name"] = user["name"]
+    return redirect("/todos")
 
 
-# Welcome page - requires login
-@app.route("/welcome")
-def welcome():
-
-    if "user_id" not in session:
+@app.route("/todos", methods=["GET", "POST"])
+def todos():
+    if not session.get("user_id"):
         return redirect("/")
 
-    safe_name = escape(session.get("name", "User"))
+    user_id = session["user_id"]
+    message = ""
 
-    return f"""
-    <h2>Welcome, {safe_name}!</h2>
-    <p>You are logged in successfully.</p>
-    <a href="/logout">Logout</a>
-    """
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+
+        if not title:
+            message = "Title is required"
+        elif len(title) > 200:
+            message = "Title is too long (200 characters at most)"
+        else:
+            db = get_db()
+            try:
+                with db.cursor() as cur:
+                    cur.execute(
+                        """INSERT INTO todos (user_id, title)
+                           VALUES (%s, %s)""",
+                        (user_id, title)
+                    )
+                db.commit()
+            finally:
+                db.close()
+            return redirect("/todos")
+
+    db = get_db()
+    try:
+        with db.cursor() as cur:
+            cur.execute(
+                """SELECT todo_id, title, is_done FROM todos
+                   WHERE user_id = %s
+                   ORDER BY created_at DESC, todo_id DESC""",
+                (user_id,)
+            )
+            tasks = cur.fetchall()
+    finally:
+        db.close()
+
+    task_html = ""
+
+    for task in tasks:
+        tid = task["todo_id"]
+        title = escape(task["title"])
+        checked = "checked" if task["is_done"] else ""
+        done_class = "done" if task["is_done"] else ""
+
+        task_html += f"""
+        <div class="task">
+            <form method="POST" action="/todos/{tid}/toggle">
+                <input type="checkbox" {checked}
+                       onchange="this.form.submit()">
+            </form>
+
+            <form class="edit-form" method="POST"
+                  action="/todos/{tid}/edit">
+                <input class="{done_class}" name="title"
+                       value="{title}" maxlength="200" required>
+                <button type="submit">Save</button>
+            </form>
+
+            
+<form method="POST" action="/todos/{tid}/delete"
+      onsubmit="return confirm('Are you sure you want to delete this task?');">
+    <button type="submit">Delete</button>
+</form>
+
+        </div>
+        """
+
+    return page("My Tasks", f"""
+        <h2> To-Do </h2>
+        <p>Welcome, {escape(session.get("name", ""))}</p>
+
+        <form class="add-form" method="POST">
+            <input name="title"
+                   placeholder="What needs to be done?"
+                   maxlength="200" required>
+            <button type="submit">Add</button>
+        </form>
+
+        <p class="error">{escape(message)}</p>
+        {task_html}
+
+        <p><a href="/logout">Logout</a></p>
+    """)
 
 
-# Logout
+@app.route("/todos/<int:tid>/toggle", methods=["POST"])
+def toggle(tid):
+    if not session.get("user_id"):
+        return redirect("/")
+
+    db = get_db()
+    try:
+        with db.cursor() as cur:
+            cur.execute(
+                """UPDATE todos SET is_done = 1 - is_done
+                   WHERE todo_id = %s AND user_id = %s""",
+                (tid, session["user_id"])
+            )
+        db.commit()
+    finally:
+        db.close()
+
+    return redirect("/todos")
+
+
+@app.route("/todos/<int:tid>/edit", methods=["POST"])
+def edit(tid):
+    if not session.get("user_id"):
+        return redirect("/")
+
+    title = request.form.get("title", "").strip()
+
+    if not title:
+        return error_page("Title is required", "/todos")
+    if len(title) > 200:
+        return error_page(
+            "Title is too long (200 characters at most)", "/todos"
+        )
+
+    db = get_db()
+    try:
+        with db.cursor() as cur:
+            cur.execute(
+                """UPDATE todos SET title = %s
+                   WHERE todo_id = %s AND user_id = %s""",
+                (title, tid, session["user_id"])
+            )
+        db.commit()
+    finally:
+        db.close()
+
+    return redirect("/todos")
+
+
+@app.route("/todos/<int:tid>/delete", methods=["POST"])
+def delete(tid):
+    if not session.get("user_id"):
+        return redirect("/")
+
+    db = get_db()
+    try:
+        with db.cursor() as cur:
+            cur.execute(
+                """DELETE FROM todos
+                   WHERE todo_id = %s AND user_id = %s""",
+                (tid, session["user_id"])
+            )
+        db.commit()
+    finally:
+        db.close()
+
+    return redirect("/todos")
+
+
 @app.route("/logout")
 def logout():
     session.clear()
