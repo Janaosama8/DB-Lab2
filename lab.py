@@ -101,6 +101,23 @@ def page(title, content):
             .error {{
                 color: red;
             }}
+            .counter {{
+                background: #eef5ff;
+                padding: 12px;
+                border-radius: 6px;
+                margin: 15px 0;
+            }}
+            .filters {{
+                margin: 15px 0;
+            }}
+            .filters a {{
+                margin-right: 10px;
+            }}
+            @media (max-width: 450px) {{
+                .task {{
+                    flex-wrap: wrap;
+                }}
+            }}
         </style>
     </head>
     <body>
@@ -117,74 +134,57 @@ def error_page(message, back="/"):
     """)
 
 
-
-
 @app.route("/")
 def home():
     return page("Login", """
         <h2>Login</h2>
-
         <form method="POST" action="/login">
             <p>
                 <label>Email</label><br>
                 <input type="email" name="email"
                        placeholder="Enter your email" required>
             </p>
-
             <p>
                 <label>Password</label><br>
                 <input type="password" name="password"
                        placeholder="Enter your password" required>
             </p>
-
             <button type="submit">Login</button>
         </form>
-
-        <p>Don't have an account?
-           <a href="/register">Register</a></p>
+        <p>Don't have an account? <a href="/register">Register</a></p>
     """)
-
-
 
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
-   
     if request.method == "GET":
         return page("Register", """
             <h2>Register</h2>
-
             <form method="POST">
                 <p>
                     <label>Name</label><br>
                     <input name="name" placeholder="Enter your name"
                            maxlength="100" required>
                 </p>
-
                 <p>
                     <label>Email</label><br>
                     <input type="email" name="email"
                            placeholder="Enter your email" required>
                 </p>
-
                 <p>
                     <label>Password</label><br>
                     <input type="password" name="password"
                            placeholder="Enter your password" required>
                 </p>
-
                 <p>
                     <label>Confirm Password</label><br>
                     <input type="password" name="confirm"
                            placeholder="Confirm your password" required>
                 </p>
-
                 <button type="submit">Register</button>
             </form>
-
             <p>Already registered? <a href="/">Login</a></p>
         """)
-
 
     name = request.form.get("name", "").strip()
     email = request.form.get("email", "").strip()
@@ -216,7 +216,39 @@ def register():
             )
         db.commit()
     except pymysql.err.IntegrityError:
-        return error_page("Email Already Exists", "/register")
+         return page("Register", f"""
+            <h2>Register</h2>
+
+            <p style="color: red;">Email already exists. .</p>
+
+            <form method="POST">
+                <p>
+                    <label>Name</label><br>
+                    <input name="name" value="{escape(name)}"
+                           maxlength="100" required>
+                </p>
+
+                <p>
+                    <label>Email</label><br>
+                    <input type="email" name="email" value="{escape(email)}"
+                           required>
+                             </p>
+
+                <p>
+                    <label>Password</label><br>
+                    <input type="password" name="password" required>
+                </p>
+
+                <p>
+                    <label>Confirm Password</label><br>
+                    <input type="password" name="confirm" required>
+                </p>
+
+                <button type="submit">Register</button>
+            </form>
+
+            <p>Already registered? <a href="/">Login</a></p>
+        """)
     finally:
         db.close()
 
@@ -263,6 +295,10 @@ def todos():
     user_id = session["user_id"]
     message = ""
 
+    filter_by = request.args.get("filter", "all")
+    if filter_by not in ("all", "open", "done"):
+        filter_by = "all"
+
     if request.method == "POST":
         title = request.form.get("title", "").strip()
 
@@ -282,18 +318,36 @@ def todos():
                 db.commit()
             finally:
                 db.close()
-            return redirect("/todos")
+
+            return redirect("/todos?filter=" + filter_by)
+
+    query = """
+        SELECT todo_id, title, is_done
+        FROM todos
+        WHERE user_id = %s
+    """
+    params = [user_id]
+
+    if filter_by == "open":
+        query += " AND is_done = 0"
+    elif filter_by == "done":
+        query += " AND is_done = 1"
+
+    query += " ORDER BY created_at DESC, todo_id DESC"
 
     db = get_db()
     try:
         with db.cursor() as cur:
+            cur.execute(query, params)
+            tasks = cur.fetchall()
+
             cur.execute(
-                """SELECT todo_id, title, is_done FROM todos
-                   WHERE user_id = %s
-                   ORDER BY created_at DESC, todo_id DESC""",
+                """SELECT COUNT(*) AS open_count
+                   FROM todos
+                   WHERE user_id = %s AND is_done = 0""",
                 (user_id,)
             )
-            tasks = cur.fetchall()
+            open_count = cur.fetchone()["open_count"]
     finally:
         db.close()
 
@@ -319,18 +373,24 @@ def todos():
                 <button type="submit">Save</button>
             </form>
 
-            
-<form method="POST" action="/todos/{tid}/delete"
-      onsubmit="return confirm('Are you sure you want to delete this task?');">
-    <button type="submit">Delete</button>
-</form>
-
+            <form method="POST" action="/todos/{tid}/delete"
+                  onsubmit="return confirm('Are you sure you want to delete this task?');">
+                <button type="submit">Delete</button>
+            </form>
         </div>
         """
 
+    all_style = "font-weight:bold;" if filter_by == "all" else ""
+    open_style = "font-weight:bold;" if filter_by == "open" else ""
+    done_style = "font-weight:bold;" if filter_by == "done" else ""
+
     return page("My Tasks", f"""
-        <h2> To-Do </h2>
+        <h2>To-Do List</h2>
         <p>Welcome, {escape(session.get("name", ""))}</p>
+
+        <div class="counter">
+            <strong>Open tasks: {open_count}</strong>
+        </div>
 
         <form class="add-form" method="POST">
             <input name="title"
@@ -340,7 +400,15 @@ def todos():
         </form>
 
         <p class="error">{escape(message)}</p>
-        {task_html}
+
+        <h3>Filter Tasks</h3>
+        <div class="filters">
+            <a href="/todos?filter=all" style="{all_style}">All</a>
+            <a href="/todos?filter=open" style="{open_style}">Open</a>
+            <a href="/todos?filter=done" style="{done_style}">Done</a>
+        </div>
+
+        {task_html if tasks else "<p>No tasks to display.</p>"}
 
         <p><a href="/logout">Logout</a></p>
     """)
